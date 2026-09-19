@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ event.title }} — {{ event.theme }}</title>
+<meta name="description" content="Registration — {{ event.title }}, {{ event.dates }}. Theme: {{ event.theme }}.">
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='img/rccg-logo.png') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="page">
+  <main class="card" id="card">
+
+    <!-- ══ LEFT: animated showcase panel ══ -->
+    <section class="panel">
+      <div class="panel-bg"><canvas id="dotmap"></canvas></div>
+      <div class="panel-content">
+        <div class="logos reveal" data-delay="200">
+          <img src="{{ url_for('static', filename='img/rccg-logo.png') }}" alt="RCCG Logo" class="logo logo-rccg">
+          <span class="logo-divider"></span>
+          <img src="{{ url_for('static', filename='img/rmf-logo.png') }}" alt="Redeemer's Men Fellowship Logo" class="logo logo-rmf">
+        </div>
+        <p class="eyebrow reveal" data-delay="350">{{ event.org }}</p>
+        <h1 class="title reveal" data-delay="500">Maiden Provincial<br>Convention <span class="year">2026</span></h1>
+        <p class="theme reveal" data-delay="650">Theme: <strong>“{{ event.theme }}”</strong></p>
+        <p class="dates reveal" data-delay="800">{{ event.dates }}</p>
+        <div class="countdown reveal" data-delay="950" id="countdown">
+          <div class="cd-box"><span id="cd-d">--</span><label>Days</label></div>
+          <div class="cd-box"><span id="cd-h">--</span><label>Hours</label></div>
+          <div class="cd-box"><span id="cd-m">--</span><label>Mins</label></div>
+          <div class="cd-box"><span id="cd-s">--</span><label>Secs</label></div>
+        </div>
+      </div>
+      <div class="panel-shine"></div>
+    </section>
+
+    <!-- ══ RIGHT: registration form ══ -->
+    <section class="form-side">
+      <div class="form-scroll">
+        <header class="form-head">
+          <h2 class="reveal" data-delay="300">Delegate Registration</h2>
+          <p class="reveal" data-delay="420">Secure your spot at the convention. Fields marked <span class="req">*</span> are required.</p>
+        </header>
+
+        <form id="regForm" method="post" action="{{ url_for('register') }}" novalidate>
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <!-- honeypot: invisible to humans -->
+          <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off">
+
+          <div class="field reveal" data-delay="520">
+            <label for="full_name">Full Name (Surname first) <span class="req">*</span></label>
+            <input id="full_name" name="full_name" type="text" required maxlength="120" placeholder="e.g. Adeyemi Olusegun Johnson" autocomplete="name">
+          </div>
+
+          <div class="grid-2">
+            <div class="field reveal" data-delay="580">
+              <label for="email">Email <span class="req">*</span></label>
+              <input id="email" name="email" type="email" required maxlength="120" placeholder="you@example.com" autocomplete="email">
+            </div>
+            <div class="field reveal" data-delay="640">
+              <label for="phone">Phone Number <span class="req">*</span></label>
+              <input id="phone" name="phone" type="tel" required maxlength="20" placeholder="+234 801 234 5678" autocomplete="tel">
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field reveal" data-delay="700">
+              <label for="zone">Please select your Zone <span class="req">*</span></label>
+              <select id="zone" name="zone" required>
+                <option value="" disabled selected>Choose your zone…</option>
+                {% for z in zones %}<option value="{{ z }}">{{ z }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="field reveal" data-delay="760">
+              <label for="area">Please specify your Area <span class="req">*</span></label>
+              <input id="area" name="area" type="text" required maxlength="120" placeholder="Your area / assembly">
+            </div>
+          </div>
+
+          <div class="field reveal" data-delay="820">
+            <label>Are you attending Physically or Online? <span class="req">*</span></label>
+            <div class="radio-row" role="radiogroup">
+              <label class="pill"><input type="radio" name="attendance" value="Physically" required><span>Physically</span></label>
+              <label class="pill"><input type="radio" name="attendance" value="Online"><span>Online</span></label>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="field reveal" data-delay="880">
+              <label for="dob">Date of Birth <span class="req">*</span></label>
+              <div class="dob-wrapper">
+                <input type="text" id="dob" name="dob" placeholder="YYYY-MM-DD" readonly required autocomplete="bday">
+                <button type="button" class="dob-toggle-btn" aria-label="Open Calendar">📅</button>
+                <div id="dob-popover" class="glass-calendar" hidden>
+                  <div class="cal-head">
+                    <div class="cal-selects">
+                      <select id="cal-month-select" class="glass-select-sm" aria-label="Month"></select>
+                      <select id="cal-year-select" class="glass-select-sm" aria-label="Year"></select>
+                    </div>
+                    <div class="cal-nav-btns">
+                      <button type="button" id="cal-prev-btn" class="cal-nav" aria-label="Previous month">&lt;</button>
+                      <button type="button" id="cal-next-btn" class="cal-nav" aria-label="Next month">&gt;</button>
+                    </div>
+                  </div>
+                  <div class="cal-dow">
+                    <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                  </div>
+                  <div id="cal-days-grid" class="cal-grid"></div>
+                </div>
+              </div>
+            </div>
+            <div class="field reveal" data-delay="940">
+              <label for="rmf_position">Position held in RMF <span class="hint">(if any)</span></label>
+              <input id="rmf_position" name="rmf_position" type="text" maxlength="120" placeholder="e.g. Zonal Secretary">
+            </div>
+          </div>
+
+          <div class="field reveal" data-delay="1000">
+            <label for="church_position">Position in Church <span class="hint">(if any)</span></label>
+            <input id="church_position" name="church_position" type="text" maxlength="120" placeholder="e.g. Choir Coordinator">
+          </div>
+
+          <div class="submit-wrap reveal" data-delay="1080">
+            <button type="submit" class="btn" id="submitBtn">
+              <span class="btn-label">Register Now</span>
+              <span class="btn-spinner" hidden></span>
+            </button>
+            <p class="secure-note">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+              Secured with CSRF protection &amp; encrypted transport
+            </p>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <!-- ══ Success overlay ══ -->
+  <div class="overlay" id="overlay" hidden>
+    <div class="overlay-card">
+      <svg class="check" viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l8 8 15-17"/></svg>
+      <h3>Registration Confirmed</h3>
+      <p id="ovText"></p>
+      <p class="reg-code" id="ovCode"></p>
+      <button class="btn btn-ghost" id="ovClose">Close</button>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
+</body>
+</html>

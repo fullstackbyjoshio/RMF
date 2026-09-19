@@ -1,0 +1,224 @@
+"""
+RMF Region 12 — Maiden Provincial Convention 2026
+Secure registration form (Flask + SQLite)
+
+Run:  python app.py          (dev)
+      gunicorn app:app       (production)
+
+Environment variables:
+  SECRET_KEY        -> long random string (required in production)
+  ADMIN_PASSWORD    -> password for the admin dashboard
+  DATABASE_PATH     -> defaults to registrations.db beside this file
+"""
+
+import os, re, sqlite3, secrets, csv, io, time
+from datetime import datetime
+from functools import wraps
+from flask import (Flask, render_template, request, jsonify, session,
+                   abort, Response, redirect, url_for)
+
+app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024  # 64 KB — a form, nothing more
+
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "change-me-now")
+DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(os.path.dirname(__file__), "registrations.db"))
+
+# ── Update these with the official RMF Region 12 zone names ─────────────
+ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"]
+EVENT = {
+    "title": "Maiden Provincial Convention 2026",
+    "theme": "The Excellent Man",
+    "dates": "13th – 15th November, 2026",
+    "org": "Redeemer's Men Fellowship, Region 12 — RCCG",
+}
+
+# ── Database ─────────────────────────────────────────────────────────────
+def get_db():
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL")
+    return con
+
+def init_db():
+    con = get_db()
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS registrations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reg_code TEXT UNIQUE NOT NULL,
+            full_name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            phone TEXT NOT NULL,
+            zone TEXT NOT NULL,
+            area TEXT NOT NULL,
+            attendance TEXT NOT NULL,
+            dob TEXT NOT NULL,
+            rmf_position TEXT DEFAULT '',
+            church_position TEXT DEFAULT '',
+            ip TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+    con.commit()
+    con.close()
+
+init_db()
+
+# ── Security headers ─────────────────────────────────────────────────────
+@app.after_request
+def set_headers(resp):
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'none'; "
+        "form-action 'self'"
+    )
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if request.is_secure:
+        resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return resp
+
+# ── Simple in-memory rate limiter (10 submissions / 10 min / IP) ────────
+HITS = {}
+def rate_limited(ip):
+    now = time.time()
+    window = [t for t in HITS.get(ip, []) if now - t < 600]
+    HITS[ip] = window
+    if len(window) >= 10:
+        return True
+    HITS[ip].append(now)
+    return False
+
+# ── Validation helpers ───────────────────────────────────────────────────
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+PHONE_RE = re.compile(r"^\+?[0-9 ()-]{7,20}$")
+
+def clean(s, maxlen=120):
+    return (s or "").strip()[:maxlen]
+
+# ── Routes ───────────────────────────────────────────────────────────────
+@app.route("/")
+def index():
+    session["csrf"] = secrets.token_hex(16)
+    return render_template("index.html", event=EVENT, zones=ZONES,
+                           csrf=session["csrf"])
+
+@app.route("/register", methods=["POST"])
+def register():
+    if session.get("csrf") != request.form.get("csrf"):
+        abort(403)
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    if rate_limited(ip):
+        return jsonify({"success": False, "message":
+                        "Too many attempts. Please try again in a few minutes."}), 429
+
+    # Honeypot — humans never fill this hidden field
+    if request.form.get("website"):
+        return jsonify({"success": True, "reg_code": "RMF-2026-PENDING"})
+
+    full_name  = clean(request.form.get("full_name"), 120)
+    email      = clean(request.form.get("email"), 120).lower()
+    phone      = clean(request.form.get("phone"), 20)
+    zone       = clean(request.form.get("zone"), 60)
+    area       = clean(request.form.get("area"), 120)
+    attendance = clean(request.form.get("attendance"), 20)
+    dob        = clean(request.form.get("dob"), 10)
+    rmf_pos    = clean(request.form.get("rmf_position"), 120)
+    church_pos = clean(request.form.get("church_position"), 120)
+
+    errors = []
+    if not full_name or len(full_name) < 3:          errors.append("full name")
+    if not EMAIL_RE.match(email):                    errors.append("email")
+    if not PHONE_RE.match(phone):                    errors.append("phone number")
+    if zone not in ZONES:                            errors.append("zone")
+    if not area:                                     errors.append("area")
+    if attendance not in ("Physically", "Online"):   errors.append("attendance mode")
+    d = None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            d = datetime.strptime(dob, fmt)
+            break
+        except ValueError:
+            continue
+    if d is None or not (1940 <= d.year <= 2012):
+        errors.append("date of birth")
+
+    if errors:
+        return jsonify({"success": False,
+                        "message": "Please check: " + ", ".join(errors)}), 400
+
+    reg_code = "RMF26-" + secrets.token_hex(3).upper()
+    try:
+        con = get_db()
+        con.execute(
+            """INSERT INTO registrations
+               (reg_code, full_name, email, phone, zone, area, attendance,
+                dob, rmf_position, church_position, ip, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (reg_code, full_name, email, phone, zone, area, attendance,
+             dob, rmf_pos, church_pos, ip, datetime.utcnow().isoformat()))
+        con.commit()
+        con.close()
+    except sqlite3.IntegrityError:
+        return jsonify({"success": False,
+                        "message": "This email is already registered."}), 409
+
+    # TODO: plug in an SMTP/Resend call here to send a confirmation email.
+    return jsonify({"success": True, "reg_code": reg_code,
+                    "name": full_name.split()[0]})
+
+# ── Admin (obfuscated path + session password) ───────────────────────────
+def admin_required(f):
+    @wraps(f)
+    def wrapper(*a, **kw):
+        if not session.get("rmf_admin"):
+            return redirect(url_for("admin_login"))
+        return f(*a, **kw)
+    return wrapper
+
+@app.route("/rmf-admin-2026/", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        if secrets.compare_digest(request.form.get("password", ""), ADMIN_PASSWORD):
+            session["rmf_admin"] = True
+            return redirect(url_for("admin_panel"))
+        return render_template("admin_login.html", error="Incorrect password."), 401
+    return render_template("admin_login.html", error=None)
+
+@app.route("/rmf-admin-2026/panel")
+@admin_required
+def admin_panel():
+    con = get_db()
+    rows = con.execute("SELECT * FROM registrations ORDER BY id DESC LIMIT 500").fetchall()
+    total = con.execute("SELECT COUNT(*) c FROM registrations").fetchone()["c"]
+    con.close()
+    return render_template("admin.html", rows=rows, total=total, event=EVENT)
+
+@app.route("/rmf-admin-2026/export.csv")
+@admin_required
+def admin_export():
+    con = get_db()
+    rows = con.execute("SELECT * FROM registrations ORDER BY id").fetchall()
+    con.close()
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["Reg Code","Full Name","Email","Phone","Zone","Area",
+                "Attendance","DOB (dd/mm/yyyy)","RMF Position","Church Position","Registered (UTC)"])
+    for r in rows:
+        w.writerow([r["reg_code"], r["full_name"], r["email"], r["phone"],
+                    r["zone"], r["area"], r["attendance"], r["dob"],
+                    r["rmf_position"], r["church_position"], r["created_at"]])
+    return Response(buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=rmf_convention_2026.csv"})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)

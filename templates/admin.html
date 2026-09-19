@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registrations — {{ event.title }}</title><link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"></head>
+<body class="admin-body">
+<div class="admin-wrap">
+  <header class="admin-head"><h2>{{ event.title }} — Registrations ({{ total }})</h2>
+  <a class="btn btn-ghost" href="{{ url_for('admin_export') }}">Export CSV</a></header>
+  <table class="admin-table"><thead><tr>
+    <th>Code</th><th>Name</th><th>Email</th><th>Phone</th><th>Zone</th><th>Area</th><th>Mode</th><th>DOB</th><th>Registered</th>
+  </tr></thead><tbody>
+  {% for r in rows %}<tr>
+    <td>{{ r.reg_code }}</td><td>{{ r.full_name }}</td><td>{{ r.email }}</td><td>{{ r.phone }}</td>
+    <td>{{ r.zone }}</td><td>{{ r.area }}</td><td>{{ r.attendance }}</td><td>{{ r.dob }}</td><td>{{ r.created_at[:16] }}</td>
+  </tr>{% endfor %}
+  </tbody></table>
+</div></body></html>
