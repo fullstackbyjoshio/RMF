@@ -1,16 +1,73 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Registrations — {{ event.title }}</title><link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"></head>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrations — {{ event.title }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body.admin-body {
+            margin: 0; min-height: 100vh; background: #121212; color: #fff;
+            font-family: system-ui, -apple-system, sans-serif; padding: 32px 16px;
+        }
+        .admin-wrap {
+            max-width: 1400px; margin: 0 auto;
+            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(18,18,18,0.95) 100%);
+            backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+        }
+        .admin-head {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 24px; flex-wrap: wrap; gap: 16px;
+        }
+        .admin-head h2 { margin: 0; font-size: 1.25rem; font-weight: 600; }
+        .btn {
+            background: rgba(255,255,255,0.15); color: #fff; text-decoration: none;
+            padding: 10px 20px; border-radius: 9999px; font-weight: 500; font-size: 0.85rem;
+            border: 1px solid rgba(255,255,255,0.2); transition: 0.2s; display: inline-block;
+        }
+        .btn:hover { background: rgba(255,255,255,0.25); }
+        .admin-table-container { overflow-x: auto; }
+        .admin-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: left; white-space: nowrap; }
+        .admin-table th, .admin-table td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .admin-table th { color: #9ca3af; font-weight: 600; background: rgba(0,0,0,0.2); }
+        .admin-table tr:last-child td { border-bottom: none; }
+        .admin-table tr:hover td { background: rgba(255,255,255,0.03); }
+        code { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 6px; font-size: 0.75rem; color: #e5e7eb; }
+    </style>
+</head>
 <body class="admin-body">
 <div class="admin-wrap">
-  <header class="admin-head"><h2>{{ event.title }} — Registrations ({{ total }})</h2>
-  <a class="btn btn-ghost" href="{{ url_for('admin_export') }}">Export CSV</a></header>
-  <table class="admin-table"><thead><tr>
-    <th>Code</th><th>Name</th><th>Email</th><th>Phone</th><th>Zone</th><th>Area</th><th>Mode</th><th>DOB</th><th>Registered</th>
-  </tr></thead><tbody>
-  {% for r in rows %}<tr>
-    <td>{{ r.reg_code }}</td><td>{{ r.full_name }}</td><td>{{ r.email }}</td><td>{{ r.phone }}</td>
-    <td>{{ r.zone }}</td><td>{{ r.area }}</td><td>{{ r.attendance }}</td><td>{{ r.dob }}</td><td>{{ r.created_at[:16] }}</td>
-  </tr>{% endfor %}
-  </tbody></table>
-</div></body></html>
+  <header class="admin-head">
+    <h2>{{ event.title }} — Registrations ({{ total }})</h2>
+    <a class="btn" href="{{ url_for('admin_export') }}">Export CSV</a>
+  </header>
+  <div class="admin-table-container">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Code</th><th>Name</th><th>Email</th><th>Phone</th><th>Zone</th><th>Area</th><th>Mode</th><th>DOB</th><th>Registered</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td><code>{{ r.reg_code }}</code></td>
+          <td>{{ r.full_name }}</td>
+          <td>{{ r.email }}</td>
+          <td>{{ r.phone }}</td>
+          <td>{{ r.zone }}</td>
+          <td>{{ r.area }}</td>
+          <td>{{ r.attendance }}</td>
+          <td>{{ r.dob }}</td>
+          <td>{{ r.created_at[:16] }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9" style="text-align:center; color:#9ca3af; padding:32px;">No registrations yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+</body>
+</html>
